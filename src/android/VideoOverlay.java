@@ -27,9 +27,9 @@ public class VideoOverlay extends ViewGroup implements TextureView.SurfaceTextur
     private boolean mStartWhenInitialized = false;
 
     private String mFilePath;
-    private boolean mRecordAudio = true;
     private int mCameraFacing = Camera.CameraInfo.CAMERA_FACING_BACK;
     private int mOrientation;
+    private int mOrientationHint;
 
     public VideoOverlay(Context context) {
         super(context);
@@ -47,10 +47,6 @@ public class VideoOverlay extends ViewGroup implements TextureView.SurfaceTextur
 
     public void setCameraFacing(String cameraFace) {
         mCameraFacing = (cameraFace.equalsIgnoreCase("FRONT") ? Camera.CameraInfo.CAMERA_FACING_FRONT : Camera.CameraInfo.CAMERA_FACING_BACK);
-    }
-
-    public void setRecordAudio(boolean recordAudio) {
-        mRecordAudio = recordAudio;
     }
 
     public void Start(String filePath) throws Exception {
@@ -91,40 +87,49 @@ public class VideoOverlay extends ViewGroup implements TextureView.SurfaceTextur
             mRecorder.setCamera(mCamera);
 
             CamcorderProfile profile;
-            if (CamcorderProfile.hasProfile(mCameraId, CamcorderProfile.QUALITY_LOW)) {
-                profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_LOW);
+            if (CamcorderProfile.hasProfile(mCameraId, CamcorderProfile.QUALITY_480P)) {
+                profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_480P);
+                profile.videoFrameWidth = 720;
+                profile.videoFrameHeight = 480;
+                Log.w(TAG, "QUALITY_480P");
             } else {
-                profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_HIGH);
+                if (CamcorderProfile.hasProfile(mCameraId, CamcorderProfile.QUALITY_720P)) {
+                    profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_720P);
+                    profile.videoFrameWidth = 1280;
+                    profile.videoFrameHeight = 720;
+                    Log.w(TAG, "QUALITY_720P");
+                } else {
+                    if (CamcorderProfile.hasProfile(mCameraId, CamcorderProfile.QUALITY_1080P)) {
+                        profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_1080P);
+                        profile.videoFrameWidth = 1920;
+                        profile.videoFrameHeight = 1080;
+                        Log.w(TAG, "QUALITY_1080P");
+                    } else {
+                        profile = CamcorderProfile.get(mCameraId, CamcorderProfile.QUALITY_LOW);
+                        Camera.Size lowestRes = CameraHelper.getBestResolution(cameraParameters);
+                        profile.videoFrameWidth = lowestRes.width;
+                        profile.videoFrameHeight = lowestRes.height;
+                        Log.w(TAG, "QUALITY_LOW");
+                    }
+                }
             }
 
-            Camera.Size lowestRes = CameraHelper.getLowestResolution(cameraParameters);
-            profile.videoFrameWidth = lowestRes.width;
-            profile.videoFrameHeight = lowestRes.height;
 
             mRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-            if (mRecordAudio) {
-                // With audio
-                mRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-                mRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                mRecorder.setVideoFrameRate(profile.videoFrameRate);
-                mRecorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight);
-                mRecorder.setVideoEncodingBitRate(profile.videoBitRate);
-                mRecorder.setAudioEncodingBitRate(profile.audioBitRate);
-                mRecorder.setAudioChannels(profile.audioChannels);
-                mRecorder.setAudioSamplingRate(profile.audioSampleRate);
-                mRecorder.setVideoEncoder(profile.videoCodec);
-                mRecorder.setAudioEncoder(profile.audioCodec);
-            } else {
-                // Without audio
-                mRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                mRecorder.setVideoFrameRate(profile.videoFrameRate);
-                mRecorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight);
-                mRecorder.setVideoEncodingBitRate(profile.videoBitRate);
-                mRecorder.setVideoEncoder(profile.videoCodec);
-            }
+            // With audio
+            mRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
+            mRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            mRecorder.setVideoFrameRate(profile.videoFrameRate);
+            mRecorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight);
+            mRecorder.setVideoEncodingBitRate(profile.videoBitRate);
+            mRecorder.setAudioEncodingBitRate(profile.audioBitRate);
+            mRecorder.setAudioChannels(profile.audioChannels);
+            mRecorder.setAudioSamplingRate(profile.audioSampleRate);
+            mRecorder.setVideoEncoder(profile.videoCodec);
+            mRecorder.setAudioEncoder(profile.audioCodec);
 
             mRecorder.setOutputFile(filePath);
-            mRecorder.setOrientationHint(mOrientation);
+            mRecorder.setOrientationHint(mOrientationHint);
             mRecorder.prepare();
             Log.d(TAG, "Starting recording");
             mRecorder.start();
@@ -149,6 +154,10 @@ public class VideoOverlay extends ViewGroup implements TextureView.SurfaceTextur
             }
         }
 
+        // Gleb changes
+        Log.d(TAG, "startPreview");
+//        mCamera.startPreview();
+        this.mRecordingState = RecordingState.STOPPED;
         this.releaseCamera();
         this.detachView();
 
@@ -176,11 +185,13 @@ public class VideoOverlay extends ViewGroup implements TextureView.SurfaceTextur
 
                     // Set camera parameters
                     mOrientation = CameraHelper.calculateOrientation((Activity) this.getContext(), mCameraId);
+                    mOrientationHint = CameraHelper.calculateOrientationHint((Activity) this.getContext(), mCameraId);
                     Camera.Parameters cameraParameters = mCamera.getParameters();
                     Camera.Size previewSize = CameraHelper.getPreviewSize(cameraParameters);
                     cameraParameters.setPreviewSize(previewSize.width, previewSize.height);
                     cameraParameters.setRotation(mOrientation);
                     cameraParameters.setRecordingHint(true);
+                    cameraParameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
 
                     mCamera.setParameters(cameraParameters);
                     mCamera.setDisplayOrientation(mOrientation);

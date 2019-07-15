@@ -10,49 +10,158 @@
 @synthesize webView;
 #endif
 
-//no longer needed for cordova platform 4+
-// -(CDVPlugin*) initWithWebView:(UIWebView*)theWebView
-// {
-//     self = (backgroundvideo*)[super initWithWebView:theWebView];
-//     return self;
-// }
-
 #pragma mark -
 #pragma mark backgroundvideo
 
-- (void) start:(CDVInvokedUrlCommand *)command
+-(void) pluginInitialize{
+  // start as transparent
+  self.webView.opaque = NO;
+  self.webView.backgroundColor = [UIColor clearColor];
+}
+
+- (void) startCamera:(CDVInvokedUrlCommand *)command
 {
+
     //stop the device from being able to sleep
     [UIApplication sharedApplication].idleTimerDisabled = YES;
-
-    self.token = [command.arguments objectAtIndex:0];
-    self.camera = [command.arguments objectAtIndex:1];
-    bool shouldRecordAudio = [[command.arguments objectAtIndex:2] boolValue];
+    //camera
+    self.camera = [command.arguments objectAtIndex:0];
 
     //get rid of the old view (causes issues if the app is resumed)
     self.parentView = nil;
 
     //make the view
-    CGRect viewRect = CGRectMake(
-                                 1,
-                                 1,
-                                 self.webView.superview.frame.size.width,
-                                 self.webView.superview.frame.size.height
-                                 );
+    CGRect viewRect;
+    if([self.camera caseInsensitiveCompare:@"front"] == NSOrderedSame)
+    {
+        viewRect = CGRectMake(
+                              20,
+                              3 * self.webView.superview.frame.size.height / 4 - 20,
+                              self.webView.superview.frame.size.width / 4,
+                              self.webView.superview.frame.size.height / 4
+                              );
+    }
+    else
+    {
+        viewRect = CGRectMake(
+                              0,
+                              0,
+                              self.webView.superview.frame.size.width,
+                              self.webView.superview.frame.size.height
+                              );
+    }
+
     self.parentView = [[UIView alloc] initWithFrame:viewRect];
     [self.webView.superview addSubview:self.parentView];
 
-    self.parentView.backgroundColor = [UIColor clearColor];
     self.view = [[UIView alloc] initWithFrame: self.parentView.bounds];
     [self.parentView addSubview: view];
-    view.alpha = 0.2f;
     self.parentView.userInteractionEnabled = NO;
+
+    self.webView.opaque = NO;
+    self.webView.backgroundColor = [UIColor clearColor];
+    if ([self.camera caseInsensitiveCompare:@"BACK"] == NSOrderedSame)
+    {
+        [self.webView.superview bringSubviewToFront:self.webView];
+    }
+
+    // camera stuff
+
+    //Capture session
+    session = [[AVCaptureSession alloc] init];
+    [session setSessionPreset:AVCaptureSessionPresetMedium];
+
+    //    Get the front camera and set the capture device
+    AVCaptureDevice *inputDevice = [self getCamera: self.camera];
+
+    //capture device output
+    CMTime maxDuration = CMTimeMakeWithSeconds(1800, 1);
+
+    output = [[AVCaptureMovieFileOutput alloc]init];
+    output.maxRecordedDuration = maxDuration;
+    output.movieFragmentInterval = kCMTimeInvalid;
+
+
+    if ( [session canAddOutput:output])
+    [session addOutput:output];
+
+    //Capture device input
+    AVCaptureDeviceInput *deviceInput = [AVCaptureDeviceInput deviceInputWithDevice:inputDevice error:nil];
+    if ( [session canAddInput:deviceInput] )
+    [session addInput:deviceInput];
+
+
+    //preview view
+    self.previewLayer = [[AVCaptureVideoPreviewLayer alloc] initWithSession:session];
+    [self.previewLayer setVideoGravity:AVLayerVideoGravityResizeAspectFill];
+
+    CALayer *rootLayer = [[self view] layer];
+    [rootLayer setMasksToBounds:YES];
+    [self.previewLayer setFrame:CGRectMake(0, 0, rootLayer.bounds.size.width, rootLayer.bounds.size.height)];
+    [rootLayer insertSublayer:self.previewLayer atIndex:0];
+
+    //    //go
+    [session startRunning];
+    //    [output startRecordingToOutputFileURL:fileURI recordingDelegate:self ];
+
+    //return true to ensure callback fires
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+
+}
+
+- (void) start:(CDVInvokedUrlCommand *)command
+{
+    //stop the device from being able to sleep
+    [UIApplication sharedApplication].idleTimerDisabled = YES;
+    //fileStorage, filename, camera, quality
+    self.token = [command.arguments objectAtIndex:1];
+    self.camera = [command.arguments objectAtIndex:2];
+
+    //get rid of the old view (causes issues if the app is resumed)
+    self.parentView = nil;
+
+    //make the view
+    CGRect viewRect;
+    if([self.camera caseInsensitiveCompare:@"front"] == NSOrderedSame)
+    {
+        viewRect = CGRectMake(
+                              20,
+                              3 * self.webView.superview.frame.size.height / 4 - 20,
+                              self.webView.superview.frame.size.width / 4,
+                              self.webView.superview.frame.size.height / 4
+                              );
+    }
+    else
+    {
+        viewRect = CGRectMake(
+                              0,
+                              0,
+                              self.webView.superview.frame.size.width,
+                              self.webView.superview.frame.size.height
+                              );
+    }
+
+    self.parentView = [[UIView alloc] initWithFrame:viewRect];
+    [self.webView.superview addSubview:self.parentView];
+
+    self.view = [[UIView alloc] initWithFrame: self.parentView.bounds];
+    [self.parentView addSubview: view];
+    self.parentView.userInteractionEnabled = NO;
+
+    self.webView.opaque = NO;
+    self.webView.backgroundColor = [UIColor clearColor];
+    if ([self.camera caseInsensitiveCompare:@"BACK"] == NSOrderedSame)
+    {
+        [self.webView.superview bringSubviewToFront:self.webView];
+    }
 
     //camera stuff
 
     //Capture session
     session = [[AVCaptureSession alloc] init];
-    [session setSessionPreset:AVCaptureSessionPresetLow];
+//    [session setSessionPreset:AVCaptureSessionPresetLow];
+    [session setSessionPreset:AVCaptureSessionPresetHigh];
 
     //Get the front camera and set the capture device
     AVCaptureDevice *inputDevice = [self getCamera: self.camera];
@@ -67,22 +176,18 @@
 
     output = [[AVCaptureMovieFileOutput alloc]init];
     output.maxRecordedDuration = maxDuration;
+    output.movieFragmentInterval = kCMTimeInvalid;
 
 
     if ( [session canAddOutput:output])
         [session addOutput:output];
 
-    if(shouldRecordAudio){
-        
-        //Capture audio input
-        AVCaptureDevice *audioCaptureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
-        AVCaptureDeviceInput *audioInput = [AVCaptureDeviceInput deviceInputWithDevice:audioCaptureDevice error:nil];
+    //Capture audio input
+    AVCaptureDevice *audioCaptureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
+    AVCaptureDeviceInput *audioInput = [AVCaptureDeviceInput deviceInputWithDevice:audioCaptureDevice error:nil];
 
-        if ([session canAddInput:audioInput])
-            [session addInput:audioInput];
-    
-    }
-
+    if ([session canAddInput:audioInput])
+        [session addInput:audioInput];
 
     //Capture device input
     AVCaptureDeviceInput *deviceInput = [AVCaptureDeviceInput deviceInputWithDevice:inputDevice error:nil];
@@ -96,7 +201,7 @@
 
     CALayer *rootLayer = [[self view] layer];
     [rootLayer setMasksToBounds:YES];
-    [self.previewLayer setFrame:CGRectMake(-70, 0, rootLayer.bounds.size.height, rootLayer.bounds.size.height)];
+    [self.previewLayer setFrame:CGRectMake(0, 0, rootLayer.bounds.size.height, rootLayer.bounds.size.height)];
     [rootLayer insertSublayer:self.previewLayer atIndex:0];
 
     //go
@@ -113,6 +218,8 @@
     [output stopRecording];
     self.view.alpha = 0;
 
+    [self.webView.superview bringSubviewToFront:self.webView];
+
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:outputPath];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
@@ -121,9 +228,10 @@
 {
     int fileNameIncrementer = 1;
     NSFileManager *fileManager = [NSFileManager defaultManager];
+//    NSString *libPath = [self getCachePath];
     NSString *libPath = [self getLibraryPath];
 
-    NSString *tempPath = [[NSString alloc] initWithFormat:@"%@%@_%i%@", libPath, self.token, fileNameIncrementer, FileExtension];
+    NSString *tempPath = [[NSString alloc] initWithFormat:@"%@%@%@", libPath, self.token, FileExtension];
 
     while ([fileManager fileExistsAtPath:tempPath]) {
         tempPath = [NSString stringWithFormat:@"%@%@_%i%@", libPath, self.token, fileNameIncrementer, FileExtension];
@@ -138,6 +246,12 @@
     NSArray *lib = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
     NSString *library = [lib objectAtIndex:0];
     return [NSString stringWithFormat:@"%@/NoCloud/", library];
+}
+
+-(NSString*)getCachePath
+{
+    NSString* cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES)[0];
+    return [NSString stringWithFormat:@"%@/", cachePath];
 }
 
 -(AVCaptureDevice *)getCamera: (NSString *)camera

@@ -1,8 +1,11 @@
 package io.iclue.backgroundvideo;
 
+import android.os.Environment;
+
 import android.content.pm.PackageManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -22,6 +25,7 @@ import java.util.List;
 
 public class BackgroundVideo extends CordovaPlugin {
     private static final String TAG = "BACKGROUND_VIDEO";
+    private static final String ACTION_START_CAMERA = "startCamera";
     private static final String ACTION_START_RECORDING = "start";
     private static final String ACTION_STOP_RECORDING = "stop";
     private static final String FILE_EXTENSION = ".mp4";
@@ -35,7 +39,9 @@ public class BackgroundVideo extends CordovaPlugin {
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         super.initialize(cordova, webView);
-        FILE_PATH = cordova.getActivity().getFilesDir().toString() + "/";
+        // FILE_PATH = Environment.getExternalStorageDirectory().toString() + "/";
+        FILE_PATH = cordova.getActivity().getCacheDir().toString() + "/";
+        // FILE_PATH = cordova.getActivity().getFilesDir().toString() + "/";
         //FILE_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).toString() + "/";
     }
 
@@ -48,14 +54,27 @@ public class BackgroundVideo extends CordovaPlugin {
         try {
             Log.d(TAG, "ACTION: " + action);
 
+            if (ACTION_START_CAMERA.equalsIgnoreCase(action)) {
+                List<String> permissions = new ArrayList<String>();
+                if (!cordova.hasPermission(android.Manifest.permission.CAMERA)) {
+                    permissions.add(android.Manifest.permission.CAMERA);
+                }
+                if (permissions.size() > 0) {
+                    cordova.requestPermissions(this, START_REQUEST_CODE, permissions.toArray(new String[0]));
+                    return true;
+                }
+
+                StartCamera(this.requestArgs);
+                return true;
+            }
+
             if (ACTION_START_RECORDING.equalsIgnoreCase(action)) {
-                boolean recordAudio = args.getBoolean(2);
 
                 List<String> permissions = new ArrayList<String>();
                 if (!cordova.hasPermission(android.Manifest.permission.CAMERA)) {
                     permissions.add(android.Manifest.permission.CAMERA);
                 }
-                if (recordAudio && !cordova.hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
+                if (!cordova.hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
                     permissions.add(android.Manifest.permission.RECORD_AUDIO);
                 }
                 if (permissions.size() > 0) {
@@ -95,11 +114,12 @@ public class BackgroundVideo extends CordovaPlugin {
         }
     }
 
-    private void Start(JSONArray args) throws JSONException {
-        final String filename = args.getString(0);
-        final String cameraFace = args.getString(1);
-        final boolean recordAudio = args.getBoolean(2);
+    private void StartCamera(JSONArray args) throws JSONException {
+        // params camera
+        _ShowCamera(true, args.getString(0));
+    }
 
+    private void _ShowCamera(Boolean useCallback, String cameraFace) {
         if (videoOverlay == null) {
             videoOverlay = new VideoOverlay(cordova.getActivity()); //, getFilePath());
 
@@ -114,26 +134,66 @@ public class BackgroundVideo extends CordovaPlugin {
 
                         // NOTE: GT-I9300 testing required wrapping view in relative layout for setAlpha to work.
                         RelativeLayout containerView = new RelativeLayout(cordova.getActivity());
-                        containerView.setAlpha(0.2f);
-                        containerView.addView(videoOverlay, new ViewGroup.LayoutParams(displaymetrics.widthPixels, displaymetrics.heightPixels));
+//                        containerView.addView(videoOverlay, new ViewGroup.LayoutParams(displaymetrics.widthPixels, displaymetrics.heightPixels));
+//
+//                        cordova.getActivity().addContentView(containerView, new ViewGroup.LayoutParams(displaymetrics.widthPixels, displaymetrics.heightPixels));
 
-                        cordova.getActivity().addContentView(containerView, new ViewGroup.LayoutParams(displaymetrics.widthPixels, displaymetrics.heightPixels));
+                        double previewBoxKoef;
+                        double previewWrapperBoxKoefWidth;
+                        double previewWrapperBoxKoefHeight;
+                        if (cameraFace.equalsIgnoreCase("FRONT")) {
+                            previewBoxKoef = 0.25;
+                            previewWrapperBoxKoefWidth = 0.97;
+                            previewWrapperBoxKoefHeight = 0.95;
+                        } else {
+                            previewBoxKoef = 1;
+                            previewWrapperBoxKoefWidth = 1;
+                            previewWrapperBoxKoefHeight = 1;
+                        }
+
+                        ViewGroup.LayoutParams l_params = new ViewGroup.LayoutParams((int)(displaymetrics.widthPixels * previewBoxKoef), (int)(displaymetrics.heightPixels * previewBoxKoef));
+                        containerView.addView(videoOverlay, l_params);
+                        containerView.setHorizontalGravity(Gravity.LEFT);
+                        containerView.setVerticalGravity(Gravity.BOTTOM);
+                        cordova.getActivity().addContentView(containerView, new ViewGroup.LayoutParams((int)(displaymetrics.widthPixels * previewWrapperBoxKoefWidth), (int)(displaymetrics.heightPixels * previewWrapperBoxKoefHeight)));
+
+                        webView.getView().setBackgroundColor(0x00000000);
+                        if (cameraFace.equalsIgnoreCase("FRONT")) {
+
+                        } else {
+                            ((ViewGroup)webView.getView()).bringToFront();
+                        }
+                        if (useCallback) {
+                            callbackContext.success();
+                        }
                     } catch (Exception e) {
                         Log.e(TAG, "Error during preview create", e);
                         callbackContext.error(TAG + ": " + e.getMessage());
                     }
                 }
             });
+
+            videoOverlay.setCameraFacing(cameraFace);
+        }
+    }
+
+    private void Start(JSONArray args) throws JSONException {
+        // params fileStorage, filename, camera, quality
+        final String filename = args.getString(1);
+        final String cameraFace = args.getString(2);
+
+        if (videoOverlay == null) {
+            _ShowCamera(false, cameraFace);
         }
 
         videoOverlay.setCameraFacing(cameraFace);
-        videoOverlay.setRecordAudio(recordAudio);
 
         cordova.getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 try {
                     videoOverlay.Start(getFilePath(filename));
+                    callbackContext.success();
                 } catch (Exception e) {
                     e.printStackTrace();
                     callbackContext.error(e.getMessage());
@@ -149,6 +209,7 @@ public class BackgroundVideo extends CordovaPlugin {
                 if (videoOverlay != null) {
                     try {
                         String filepath = videoOverlay.Stop();
+                        videoOverlay = null;
                         callbackContext.success(filepath);
                     } catch (IOException e) {
                         e.printStackTrace();
