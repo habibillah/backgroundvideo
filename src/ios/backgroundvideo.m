@@ -69,6 +69,7 @@
 
     //Capture session
     session = [[AVCaptureSession alloc] init];
+    [session beginConfiguration];
     [session setSessionPreset:AVCaptureSessionPresetMedium];
 
     //    Get the front camera and set the capture device
@@ -107,6 +108,7 @@
     [rootLayer insertSublayer:self.previewLayer atIndex:0];
 
     //    //go
+    [session commitConfiguration];
     [session startRunning];
     //    [output startRecordingToOutputFileURL:fileURI recordingDelegate:self ];
 
@@ -166,7 +168,7 @@
 
     //Capture session
     session = [[AVCaptureSession alloc] init];
-//    [session setSessionPreset:AVCaptureSessionPresetLow];
+    [session beginConfiguration];
     [session setSessionPreset:AVCaptureSessionPresetHigh];
 
     //Get the front camera and set the capture device
@@ -211,6 +213,7 @@
     [rootLayer insertSublayer:self.previewLayer atIndex:0];
 
     //go
+    [session commitConfiguration];
     [session startRunning];
     [output startRecordingToOutputFileURL:fileURI recordingDelegate:self ];
 
