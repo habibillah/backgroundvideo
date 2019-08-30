@@ -84,12 +84,18 @@
 
     if ( [session canAddOutput:output])
     [session addOutput:output];
+    
+    //Capture audio input
+    AVCaptureDevice *audioCaptureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
+    AVCaptureDeviceInput *audioInput = [AVCaptureDeviceInput deviceInputWithDevice:audioCaptureDevice error:nil];
 
+    if ([session canAddInput:audioInput])
+        [session addInput:audioInput];
+    
     //Capture device input
     AVCaptureDeviceInput *deviceInput = [AVCaptureDeviceInput deviceInputWithDevice:inputDevice error:nil];
     if ( [session canAddInput:deviceInput] )
-    [session addInput:deviceInput];
-
+        [session addInput:deviceInput];
 
     //preview view
     self.previewLayer = [[AVCaptureVideoPreviewLayer alloc] initWithSession:session];
