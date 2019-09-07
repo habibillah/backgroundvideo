@@ -174,7 +174,6 @@ public class BackgroundVideo extends CordovaPlugin {
             });
 
             videoOverlay.setCameraFacing(cameraFace);
-            videoOverlay.setRecordAudio(true);
         }
     }
 
@@ -188,7 +187,6 @@ public class BackgroundVideo extends CordovaPlugin {
         }
 
         videoOverlay.setCameraFacing(cameraFace);
-        videoOverlay.setRecordAudio(true);
 
         cordova.getActivity().runOnUiThread(new Runnable() {
             @Override
